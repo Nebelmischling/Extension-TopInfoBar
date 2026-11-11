@@ -103,7 +103,9 @@ const icons = [
 ];
 
 function onChatManagerClick() {
-    void executeSlashCommandsWithOptions('/chat-manager');
+    // Let SillyTavern show its own toast if the command fails instead of throwing
+    // an unhandled rejection (handleExecutionErrors defaults to false).
+    void executeSlashCommandsWithOptions('/chat-manager', { handleExecutionErrors: true });
 }
 
 function onNewChatClick() {
@@ -113,7 +115,7 @@ function onNewChatClick() {
 function onCloseChatClick() {
     // Runs the same code path as SillyTavern's own "Close chat" entry and also
     // works for cardless/temporary chats (see Extension-TopInfoBar#7).
-    void executeSlashCommandsWithOptions('/closechat');
+    void executeSlashCommandsWithOptions('/closechat', { handleExecutionErrors: true });
 }
 
 async function onDeleteChatClick() {
@@ -123,7 +125,7 @@ async function onDeleteChatClick() {
         return;
     }
 
-    await executeSlashCommandsWithOptions('/delchat');
+    await executeSlashCommandsWithOptions('/delchat', { handleExecutionErrors: true });
 }
 
 async function onRenameChatClick() {
@@ -180,20 +182,26 @@ function setChatName(name) {
     }
 
     setTimeout(async () => {
-        if (!isNotInChat) {
-            await populateChatNameSelect(name);
-        }
+        try {
+            const chats = isNotInChat ? [] : await getChatFiles();
 
-        await populateSideBar();
+            if (!isNotInChat) {
+                populateChatNameSelect(chats, name);
+            }
+
+            await populateSideBar(chats);
+        } catch (error) {
+            console.error('Failed to refresh the top bar chat list', error);
+        }
     }, 0);
 }
 
 /**
  * Rebuilds the list of every chat of the current character/group in the selector.
+ * @param {Array<object|string>} chats Chat entries of {@link getChatFiles}
  * @param {string} selectedName Name of the chat that should be selected
  */
-async function populateChatNameSelect(selectedName) {
-    const chats = await getChatFiles();
+function populateChatNameSelect(chats, selectedName) {
     const chatNames = chats
         .map(entry => (typeof entry === 'string' ? entry : entry?.file_name))
         .filter(Boolean)
@@ -440,7 +448,11 @@ async function onToggleSidebarClick() {
     savePanelsState();
 }
 
-async function populateSideBar() {
+/**
+ * Renders the past chats of the current character/group into the sidebar.
+ * @param {Array<object|string>?} chatEntries Pre-fetched chat list, fetched again when omitted
+ */
+async function populateSideBar(chatEntries = null) {
     const sidebar = document.getElementById('extensionSideBar');
     const loader = document.getElementById('extensionSideBarLoader');
     const container = document.getElementById('extensionSideBarContainer');
@@ -464,7 +476,11 @@ async function populateSideBar() {
     };
     container.dataset.processId = processId;
     const chatId = getCurrentChatId();
-    const chats = (await getChatFiles()).map(prettify).sort((a, b) => sortMoments(a.last_mes, b.last_mes));
+    const chats = (chatEntries ?? await getChatFiles())
+        // Group chat info for an orphaned chat file returns `{ match: false }` with HTTP 200.
+        .filter(entry => entry && typeof entry === 'object' && entry.file_name)
+        .map(prettify)
+        .sort((a, b) => sortMoments(a.last_mes, b.last_mes));
 
     if (container.dataset.processId !== processId) {
         console.log(t`Aborting populateSideBar due to process id mismatch`);
@@ -497,8 +513,9 @@ async function populateSideBar() {
 
         const chatDate = document.createElement('small');
         chatDate.classList.add('chatDate');
-        chatDate.textContent = chat.last_mes.format('l');
-        chatDate.title = chat.last_mes.format('LL LT');
+        const hasValidDate = chat.last_mes?.isValid?.() === true;
+        chatDate.textContent = hasValidDate ? chat.last_mes.format('l') : '';
+        chatDate.title = hasValidDate ? chat.last_mes.format('LL LT') : '';
 
         const chatNameContainer = document.createElement('div');
         chatNameContainer.classList.add('chatNameContainer');
@@ -635,7 +652,7 @@ async function getCurrentAPI() {
     ];
 
     for (const select of orderedSelects) {
-        const option = [...select.options].find(x => x.value === currentAPI);
+        const option = [...select.options].find(x => x.value && x.value === currentAPI);
         if (option) {
             // Remove text in parentheses or brackets, e.g. "OpenAI (GPT-4o)".
             return option.textContent.replace(/[[(].*[\])]/, '').trim();
@@ -662,7 +679,9 @@ async function getCurrentModel() {
         return currentModel;
     }
 
-    const option = [...apiBlock.querySelectorAll('option')].find(x => x.value === currentModel);
+    // Skip empty-valued options (e.g. the connection profile "None" entry) so an
+    // unknown model name does not get displayed as "None".
+    const option = [...apiBlock.querySelectorAll('option')].find(x => x.value && x.value === currentModel);
     return option ? option.textContent.trim() : currentModel;
 }
 
