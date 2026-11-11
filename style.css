@@ -1,3 +1,5 @@
+/* Compatibility shim for very old SillyTavern builds where #sheld was a grid.
+   Current builds already use flex, so this rule stays dormant. */
 body #sheld.flexPatch {
     display: flex;
     flex-direction: column;
@@ -168,7 +170,7 @@ body.movingUI #extensionTopBar {
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-    font-size: calc(var(--mainFontSize)* 0.85);
+    font-size: calc(var(--mainFontSize) * 0.85);
 }
 
 #extensionConnectionProfilesStatus~.null-icon {
@@ -200,7 +202,7 @@ body.movingUI #extensionTopBar {
     background-position: right 6px center;
     background-size: 8px 5px;
     margin: 0;
-    font-size: calc(var(--mainFontSize)* 0.9);
+    font-size: calc(var(--mainFontSize) * 0.9);
     padding-right: 20px;
 }
 
@@ -239,4 +241,86 @@ body.movingUI #extensionTopBar {
     font-style: italic;
     opacity: 0.5;
     border-color: transparent;
+}
+
+/* Search highlight (native, see highlight.js). Uses the theme text color for the
+   text and the theme's highlight-ish accent for the background, with fallbacks. */
+#chat .mes_text mark.highlight {
+    background-color: var(--topBarSearchHighlightBackground, rgba(255, 214, 64, 0.85));
+    color: var(--topBarSearchHighlightText, #1a1a1a);
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* Wrapped controls must contribute to the bar's height, including when a companion
+   theme gives this bar fixed positioning. */
+body #extensionTopBar {
+    box-sizing: border-box;
+    height: auto;
+    min-height: var(--bottomFormBlockSize);
+    align-content: flex-start;
+    align-items: center;
+    padding-block: 6px;
+    row-gap: 6px;
+    transition: opacity 0.5s ease, background-color 0.5s ease;
+}
+
+body #extensionTopBar > .right_menu_button {
+    flex: 0 0 auto;
+    align-self: center;
+}
+
+body #extensionTopBarChatName {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 5em;
+}
+
+body #extensionTopBarSearchInput {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 8em;
+}
+
+/* Extra specificity overrides themes that give the toolbar a fixed position,
+   without modifying the theme itself. Normal in-flow toolbars and visual novel
+   mode do not receive this class. */
+body #sheld.top-info-bar-fixed-space {
+    padding-top: var(--top-info-bar-space) !important;
+}
+
+/* Keep phone layouts to one compact row. All controls remain reachable by
+   horizontal scrolling instead of wrapping into a second row. */
+@media screen and (max-width: 1000px) {
+    body #extensionTopBar {
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        align-content: normal;
+        height: auto;
+        min-height: 0;
+        padding: 4px 8px;
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
+        overscroll-behavior: contain;
+        touch-action: pan-x pinch-zoom;
+    }
+
+    body #extensionTopBar > .right_menu_button {
+        margin-block: 0;
+    }
+
+    body #extensionTopBarChatName {
+        flex: 0 0 5em;
+        width: 5em;
+        margin-block: 0;
+    }
+
+    body #extensionTopBarSearchInput {
+        flex: 0 0 7em;
+        width: 7em;
+        max-width: none;
+        margin-block: 0;
+    }
 }

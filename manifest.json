@@ -6,10 +6,11 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Cohee1207",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "homePage": "https://github.com/SillyTavern/Extension-TopInfoBar",
     "auto_update": true,
     "i18n": {
+        "de-de": "i18n/de-de.json",
         "zh-cn": "i18n/zh-cn.json",
         "zh-tw": "i18n/zh-tw.json"
     }
