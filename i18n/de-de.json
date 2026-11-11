@@ -21,5 +21,7 @@
     "Failed to bind connection profiles": "Verbindungsprofile konnten nicht verbunden werden",
     "Slash command failed: ${0}": "Slash-Befehl fehlgeschlagen: ${0}",
     "Messages in chat": "Nachrichten im Chat",
-    "Chat file size": "Chat-Dateigröße"
+    "Chat file size": "Chat-Dateigröße",
+    "Switch generation preset": "Generations-Preset wechseln",
+    "Failed to bind connection preset select": "Preset-Auswahl konnte nicht verbunden werden"
 }

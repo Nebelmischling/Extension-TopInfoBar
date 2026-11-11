@@ -26,6 +26,14 @@ kept compatible with current SillyTavern releases. Licensed AGPL-3.0, same as up
   connection profile panel to be fully functional. If the selector is missing,
   the panel degrades gracefully instead of throwing.
 
+## Changes in 1.2.0
+
+- **Generation preset dropdown**: the connection profiles panel now also shows the
+  generation preset of the active API (chat completion, text completion, Kobold,
+  KoboldHorde, NovelAI). It mirrors SillyTavern's own preset select, follows API
+  and connection profile switches, and switching a preset in the top bar applies
+  it in SillyTavern immediately.
+
 ## Changes in 1.1.0
 
 - **Current SillyTavern compatibility**: verified imports, DOM ids, event types

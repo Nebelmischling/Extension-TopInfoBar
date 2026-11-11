@@ -35,6 +35,27 @@ const connectionProfiles = document.createElement('div');
 const connectionProfilesStatus = document.createElement('div');
 const connectionProfilesSelect = document.createElement('select');
 const connectionProfilesIcon = document.createElement('img');
+const connectionPresetSelect = document.createElement('select');
+
+/**
+ * SillyTavern preset selectors per main API. The top bar generation preset
+ * dropdown mirrors whichever of these belongs to the currently selected API.
+ * @type {Record<string, string>}
+ */
+const generationPresetSelectors = {
+    kobold: '#settings_preset',
+    koboldhorde: '#settings_preset',
+    novel: '#settings_preset_novel',
+    openai: '#settings_preset_openai',
+    textgenerationwebui: '#settings_preset_textgenerationwebui',
+};
+
+/** @type {HTMLSelectElement?} */
+let observedPresetSelect = null;
+/** @type {MutationObserver?} */
+let presetSelectObserver = null;
+/** @type {(() => void)?} */
+let presetSelectChangeHandler = null;
 
 /**
  * Matches the media query ST uses for its compact/mobile layout.
@@ -365,12 +386,15 @@ function addConnectionProfiles() {
     connectionProfilesSelect.id = 'extensionConnectionProfilesSelect';
     connectionProfilesSelect.title = t`Switch connection profile`;
     connectionProfilesSelect.setAttribute('aria-label', t`Switch connection profile`);
+    connectionPresetSelect.id = 'extensionConnectionPresetSelect';
+    connectionPresetSelect.title = t`Switch generation preset`;
+    connectionPresetSelect.setAttribute('aria-label', t`Switch generation preset`);
 
     const connectionProfilesServerIcon = document.createElement('i');
     connectionProfilesServerIcon.id = 'extensionConnectionProfilesIcon';
     connectionProfilesServerIcon.className = 'fa-fw fa-solid fa-network-wired';
 
-    connectionProfiles.append(connectionProfilesServerIcon, connectionProfilesSelect, connectionProfilesStatus, connectionProfilesIcon);
+    connectionProfiles.append(connectionProfilesServerIcon, connectionProfilesSelect, connectionPresetSelect, connectionProfilesStatus, connectionProfilesIcon);
     sheld.insertBefore(connectionProfiles, chat);
 
     apiBlock?.querySelectorAll('select').forEach(select => {
@@ -383,6 +407,100 @@ function addConnectionProfiles() {
  * The selector lives in the built-in "Connection Profiles" extension, so it can
  * legitimately be missing (extension disabled, late settings render, custom UI).
  */
+/**
+ * Returns the preset <select> SillyTavern uses for the currently active main API.
+ * @returns {HTMLSelectElement?}
+ */
+function getActiveGenerationPresetSelect() {
+    const context = SillyTavern.getContext();
+    const mainApi = context.mainApi ?? document.getElementById('main_api')?.value;
+    const selector = generationPresetSelectors[mainApi];
+
+    if (!selector) {
+        return null;
+    }
+
+    const presetSelect = document.querySelector(selector);
+    return presetSelect instanceof HTMLSelectElement ? presetSelect : null;
+}
+
+/**
+ * Keeps observer and change listener attached to the preset select of the active API.
+ * @param {HTMLSelectElement?} presetSelect Active SillyTavern preset select, if any
+ */
+function observeActiveGenerationPresetSelect(presetSelect) {
+    if (observedPresetSelect === presetSelect) {
+        return;
+    }
+
+    if (observedPresetSelect && presetSelectChangeHandler) {
+        observedPresetSelect.removeEventListener('change', presetSelectChangeHandler);
+    }
+
+    presetSelectObserver?.disconnect();
+    observedPresetSelect = presetSelect;
+
+    if (!presetSelect) {
+        return;
+    }
+
+    presetSelectObserver = new MutationObserver(() => syncConnectionPresetSelect());
+    presetSelectObserver.observe(presetSelect, { childList: true, subtree: true });
+
+    presetSelectChangeHandler = () => syncConnectionPresetSelect();
+    presetSelect.addEventListener('change', presetSelectChangeHandler);
+}
+
+/**
+ * Mirrors the preset select of the active SillyTavern API into the top bar.
+ * @returns {void}
+ */
+function syncConnectionPresetSelect() {
+    const presetSelect = getActiveGenerationPresetSelect();
+    observeActiveGenerationPresetSelect(presetSelect);
+
+    if (!presetSelect || presetSelect.options.length === 0) {
+        connectionPresetSelect.innerHTML = '';
+        connectionPresetSelect.classList.add('displayNone');
+        return;
+    }
+
+    connectionPresetSelect.classList.remove('displayNone');
+    connectionPresetSelect.innerHTML = presetSelect.innerHTML;
+    connectionPresetSelect.value = presetSelect.value;
+    connectionPresetSelect.disabled = presetSelect.disabled;
+}
+
+/**
+ * Wires the top bar preset dropdown to SillyTavern's preset selects.
+ * The API-specific select can be rendered late, so binding waits for it and all
+ * later panel opens / profile switches sync again.
+ * @returns {void}
+ */
+function bindConnectionPresetSelect() {
+    connectionPresetSelect.addEventListener('change', () => {
+        const presetSelect = getActiveGenerationPresetSelect();
+
+        if (!presetSelect) {
+            syncConnectionPresetSelect();
+            return;
+        }
+
+        presetSelect.value = connectionPresetSelect.value;
+        presetSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Re-sync once SillyTavern finished applying the preset, so the dropdown
+        // always reflects the selection the host actually ended up with.
+        setTimeout(syncConnectionPresetSelect, 200);
+    });
+
+    document.getElementById('main_api')?.addEventListener('change', () => setTimeout(syncConnectionPresetSelect, 0));
+
+    waitUntilCondition(() => getActiveGenerationPresetSelect() !== null, 15000, 250, { rejectOnTimeout: false })
+        .then(() => syncConnectionPresetSelect())
+        .catch(error => console.error(t`Failed to bind connection preset select`, error));
+}
+
 function bindConnectionProfilesSelect() {
     waitUntilCondition(() => document.getElementById('connection_profiles') !== null, 15000, 250, { rejectOnTimeout: false })
         .then(() => {
@@ -408,6 +526,7 @@ function bindConnectionProfilesSelect() {
                 connectionProfilesSelect.value = connectionProfilesMainSelect.value;
             });
             observer.observe(connectionProfilesMainSelect, { childList: true });
+            connectionProfilesMainSelect.addEventListener('change', () => setTimeout(syncConnectionPresetSelect, 200));
         })
         .catch(error => console.error(t`Failed to bind connection profiles`, error));
 }
@@ -603,6 +722,7 @@ async function onToggleConnectionProfilesClick() {
     button.classList.toggle('active');
     connectionProfiles.classList.toggle('visible');
     savePanelsState();
+    syncConnectionPresetSelect();
     await onOnlineStatusChange();
 }
 
@@ -700,6 +820,8 @@ async function onOnlineStatusChange() {
     } else {
         connectionProfilesSelect.classList.add('displayNone');
     }
+
+    syncConnectionPresetSelect();
 
     if (connectionProfilesStatus.nextElementSibling?.classList?.contains('icon-svg')) {
         connectionProfilesStatus.nextElementSibling.remove();
@@ -875,6 +997,7 @@ function observeTopBarLayout() {
         }
         panelsInitialized = true;
         bindConnectionProfilesSelect();
+        bindConnectionPresetSelect();
         restorePanelsState();
     };
 

@@ -39,7 +39,7 @@ if (!existsSync(publicDir)) {
 }
 
 /** Files of this extension that participate in the compatibility check. */
-const extensionJsFiles = ['index.js', 'highlight.js'];
+const extensionJsFiles = ['index.js', 'highlight.js'].filter(file => existsSync(join(extensionRoot, file)));
 /** Virtual path of the extension inside a SillyTavern installation. */
 const extensionUrlPath = posix.join('scripts', 'extensions', 'third-party', basename(extensionRoot));
 
@@ -242,6 +242,19 @@ for (const [file, source] of extensionSources) {
 }
 
 // --- 3. Event types ------------------------------------------------------------------
+// The top bar generation preset dropdown mirrors SillyTavern's #settings_preset* selects.
+const presetSelectorsSource = extensionSources.get('index.js') ?? '';
+const presetSelectorMap = /const generationPresetSelectors = \{([\s\S]*?)\};/.exec(presetSelectorsSource);
+if (presetSelectorMap) {
+    for (const match of presetSelectorMap[1].matchAll(/['"]#([\w-]+)['"]/g)) {
+        if (!htmlIds.has(match[1])) {
+            fail(`index.js: generation preset selector "#${match[1]}" not found in SillyTavern markup`);
+        }
+    }
+} else {
+    notes.push('generationPresetSelectors not found in index.js; preset anchor check skipped');
+}
+
 const eventsSource = readFileOrNull(join(publicDir, 'scripts', 'events.js')) ?? '';
 const eventNames = new Set([...eventsSource.matchAll(/^\s*([A-Z_]+):\s*['"]/gm)].map(match => match[1]));
 
